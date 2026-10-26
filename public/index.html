@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JustPrompt — GEO Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800;900&family=Caveat:wght@600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="frame"><div class="board">
+
+  <header class="masthead">
+    <div class="kicker">GEO / AEO visibility</div>
+    <h1>JustPrompt</h1>
+    <p class="sub">Scan your whole site, see every keyword, turn them into the questions buyers ask AI — then check how you rank in the answers.</p>
+  </header>
+
+  <!-- keys (compact) -->
+  <section class="card tilt"><span class="pin b"></span>
+    <div id="engineStatus" class="engines"><span class="muted">Checking keys…</span></div>
+    <div id="keyHint"></div>
+    <label class="checkbox small"><input type="checkbox" id="preferFree" checked> Free engines only</label>
+  </section>
+
+  <!-- STEP 1 — scan whole site -->
+  <section class="card"><span class="pin"></span>
+    <div class="tag">Step 1</div>
+    <h2>Scan your website</h2>
+    <div class="row">
+      <div style="flex:3 1 260px"><label>Website URL</label><input type="text" id="siteUrl" placeholder="justwords.co.uk"></div>
+      <div style="flex:1 1 90px"><label>Max pages</label><input type="number" id="maxPages" value="150" min="1" max="400"></div>
+    </div>
+    <details style="margin-top:8px">
+      <summary class="small" style="cursor:pointer;color:var(--ink-soft)">Advanced (optional): brand name, aliases, competitors</summary>
+      <div class="row">
+        <div><label>Brand name (auto from URL if blank)</label><input type="text" id="brandName" placeholder="Justwords"></div>
+        <div><label>Aliases (comma-sep)</label><input type="text" id="brandAliases" placeholder="Just Words, JW"></div>
+      </div>
+      <label>Competitors (optional — we also auto-discover them)</label>
+      <div id="competitors"></div>
+      <button id="addCompBtn" class="ghost small" style="margin-top:6px">+ Add competitor</button>
+    </details>
+    <div class="toolbar">
+      <button id="scanBtn">⛏ Scan whole site</button>
+      <span id="scanStatus" class="muted"></span>
+    </div>
+    <div id="recent" class="proj-list"></div>
+    <div id="scanOut"></div>
+  </section>
+
+  <!-- STEP 2 — keywords -->
+  <section id="kwCard" class="card yellow hidden"><span class="pin a"></span>
+    <div class="tag">Step 2</div>
+    <h2>Keywords found <span id="kwCount" class="muted" style="font-weight:700"></span></h2>
+    <div class="toolbar">
+      <button id="suggestBtn">→ Suggest prompts</button>
+      <button id="refineBtn" class="ghost small">Refine &amp; cluster with AI</button>
+      <button id="copyKwBtn" class="ghost small">Copy all</button>
+      <span id="kwStatus" class="muted"></span>
+    </div>
+    <div id="kwOut" style="max-height:340px;overflow:auto;margin-top:8px"></div>
+  </section>
+
+  <!-- STEP 3 — prompts -->
+  <section id="promptCard" class="card tilt hidden"><span class="pin b"></span>
+    <div class="tag">Step 3</div>
+    <h2>Suggested prompts</h2>
+    <p class="muted small">Real questions buyers ask AI assistants. We don't mention your brand — so we see if you get named on your own.</p>
+    <div class="toolbar">
+      <button id="genPromptsBtn" class="ghost small">Regenerate</button>
+      <input type="number" id="promptCount" value="15" min="3" max="40" style="width:66px;flex:0 0 auto">
+      <button id="addPromptBtn" class="ghost small">+ Add your own</button>
+      <button id="savePromptsBtn" class="ghost small">Save edits</button>
+      <span id="promptStatus" class="muted"></span>
+    </div>
+    <div id="promptOut"></div>
+    <h3 style="margin-top:14px">Engines to check</h3>
+    <div id="trackEngines" class="engines"></div>
+    <div class="toolbar"><button id="rankBtn" class="pin-btn">▶ Check ranking</button><span id="trackStatus" class="muted"></span></div>
+  </section>
+
+  <!-- STEP 4 — ranking -->
+  <section id="scoreCard" class="card green hidden"><span class="pin g"></span>
+    <div class="tag">Step 4</div>
+    <h2>Your ranking in AI answers</h2>
+    <div id="scoreOut"></div>
+  </section>
+
+  <p class="hand" style="text-align:center;color:var(--on-cork-soft);font-size:1.1rem;margin-top:22px">
+    Scan site → keywords → prompts → ranking &#8635;
+  </p>
+
+</div></div>
+<script src="app.js"></script>
+</body>
+</html>

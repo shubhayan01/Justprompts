@@ -1,0 +1,42 @@
+# Render Blueprint — deploy JustPrompt as a web service.
+# In Render: New + → Blueprint → connect this repo. Render reads this file.
+# Then set the secret values (API keys, APP_PASSWORD) in the dashboard.
+services:
+  - type: web
+    name: justprompt
+    runtime: node
+    plan: free                 # free tier sleeps after ~15 min idle; first hit is a cold start
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: TRACK_CONCURRENCY
+        value: "4"
+      # ── Secrets: set these in the Render dashboard (sync:false = not stored in git) ──
+      - key: GROQ_API_KEY        # free — https://console.groq.com/keys
+        sync: false
+      - key: GEMINI_API_KEY      # free + live web — https://aistudio.google.com/apikey
+        sync: false
+      - key: OPENROUTER_API_KEY  # free + all models — https://openrouter.ai/keys
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PERPLEXITY_API_KEY
+        sync: false
+      - key: APP_PASSWORD        # RECOMMENDED: password-protect the public URL
+        sync: false
+      # ── Persistent storage (uncomment WITH the disk block below; requires a paid plan) ──
+      # - key: DATA_DIR
+      #   value: /data
+
+    # Free tier has an EPHEMERAL disk: saved projects reset on every deploy and on
+    # cold starts. For durable history, switch to a paid plan and attach a disk:
+    # disk:
+    #   name: justprompt-data
+    #   mountPath: /data
+    #   sizeGB: 1

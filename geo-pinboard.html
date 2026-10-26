@@ -1,0 +1,431 @@
+<title>GEO Prompt Tracker</title>
+<style>
+  /* Layout: a framed cork pin-board. Sticky notes + index cards, each pinned or
+     taped and slightly rotated, laid out in a responsive grid that stacks on phones.
+     Palette: cork + kraft, with classic sticky-note colours and red pushpins. */
+  :root {
+    --cork-a: #cfa363;
+    --cork-b: #b8863f;
+    --speck: rgba(86,58,24,.22);
+    --frame: #5c3f21;
+    --frame-2: #6f4e2a;
+    --on-cork: #3a2912;
+    --on-cork-soft: #6a5333;
+
+    /* notes read the same in both themes (they are paper) */
+    --yellow: #ffe279;
+    --pink: #ffb1c3;
+    --blue: #a9d6ff;
+    --green: #c6e8a3;
+    --paper: #fbf7ea;
+    --kraft: #e7cfa3;
+    --ink: #2c2621;
+    --ink-soft: #6b6056;
+    --line: rgba(60,45,25,.12);
+
+    --pin-red: #d8453c;
+    --pin-blue: #3f7fd8;
+    --pin-green: #3aa667;
+    --pin-amber: #e0a52e;
+    --tape: rgba(255,255,255,.42);
+    --shadow: rgba(45,28,8,.4);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --cork-a: #3f2f1f;
+      --cork-b: #2b1f12;
+      --speck: rgba(255,228,188,.07);
+      --frame: #241708;
+      --frame-2: #34230f;
+      --on-cork: #f2e5cd;
+      --on-cork-soft: #c7b394;
+      --shadow: rgba(0,0,0,.55);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --cork-a: #3f2f1f;
+    --cork-b: #2b1f12;
+    --speck: rgba(255,228,188,.07);
+    --frame: #241708;
+    --frame-2: #34230f;
+    --on-cork: #f2e5cd;
+    --on-cork-soft: #c7b394;
+    --shadow: rgba(0,0,0,.55);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Archivo", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--frame);
+  }
+  .hand { font-family: "Caveat", "Comic Sans MS", cursive; }
+
+  /* ---- board frame ---- */
+  .frame {
+    min-height: 100%;
+    padding: clamp(14px, 4vw, 40px);
+    background:
+      repeating-linear-gradient(90deg, var(--frame) 0 6px, var(--frame-2) 6px 12px);
+    border: 2px solid rgba(0,0,0,.25);
+  }
+  .board {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: clamp(18px, 3.5vw, 40px) clamp(16px, 3vw, 36px);
+    border-radius: 6px;
+    background-color: var(--cork-a);
+    background-image:
+      radial-gradient(var(--speck) 1px, transparent 1.6px),
+      radial-gradient(var(--speck) 1px, transparent 1.6px),
+      linear-gradient(160deg, var(--cork-a), var(--cork-b));
+    background-size: 7px 7px, 13px 13px, 100% 100%;
+    background-position: 0 0, 4px 6px, 0 0;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.28), inset 0 0 0 2px rgba(0,0,0,.12);
+  }
+
+  /* ---- header banner ---- */
+  .masthead {
+    position: relative;
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 4px;
+    padding: 26px 24px 24px;
+    margin: 6px auto 34px;
+    max-width: 760px;
+    box-shadow: 0 14px 30px -14px var(--shadow), 0 3px 6px rgba(0,0,0,.14);
+    transform: rotate(-.6deg);
+    text-align: center;
+  }
+  .masthead::before, .masthead::after {
+    content: ""; position: absolute; top: -11px; width: 104px; height: 26px;
+    background: var(--tape);
+    box-shadow: 0 1px 3px rgba(0,0,0,.18);
+  }
+  .masthead::before { left: 30px; transform: rotate(-5deg); }
+  .masthead::after { right: 30px; transform: rotate(4deg); }
+  .kicker {
+    font-family: "Caveat", cursive; font-size: 1.35rem; color: #b24a2e; font-weight: 700;
+    line-height: 1;
+  }
+  .masthead h1 {
+    font-family: "Archivo", sans-serif; font-weight: 900; letter-spacing: -.02em;
+    font-size: clamp(2rem, 7vw, 3.1rem); margin: 4px 0 6px; text-wrap: balance;
+  }
+  .masthead .sub { color: var(--ink-soft); font-size: 1rem; margin: 0 auto; max-width: 52ch; line-height: 1.5; }
+  .meta-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+  .meta-chips span {
+    font-size: .74rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+    background: var(--kraft); color: #4a371b; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid rgba(0,0,0,.08);
+  }
+
+  /* ---- grid of cards ---- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+    gap: clamp(22px, 2.6vw, 34px);
+    align-items: start;
+  }
+  .card {
+    position: relative;
+    padding: 20px 20px 22px;
+    border-radius: 3px;
+    background: var(--paper);
+    box-shadow: 0 12px 24px -12px var(--shadow), 0 2px 4px rgba(0,0,0,.12);
+    transform: rotate(var(--rot, 0deg));
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .card:hover { transform: rotate(0deg) translateY(-3px) scale(1.012); box-shadow: 0 20px 34px -14px var(--shadow); z-index: 4; }
+  .card:focus-within { transform: rotate(0deg); z-index: 4; }
+  .yellow { background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(0,0,0,.02)), var(--yellow); }
+  .pink   { background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(0,0,0,.02)), var(--pink); }
+  .blue   { background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(0,0,0,.02)), var(--blue); }
+  .green  { background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(0,0,0,.02)), var(--green); }
+  .wide { grid-column: 1 / -1; }
+  @media (min-width: 760px) { .span2 { grid-column: span 2; } }
+
+  /* pins + tape */
+  .pin {
+    position: absolute; top: -9px; left: 50%; width: 17px; height: 17px; border-radius: 50%;
+    transform: translateX(-50%);
+    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.85), var(--pin-red) 48%, rgba(0,0,0,.35));
+    box-shadow: 0 3px 5px rgba(0,0,0,.45);
+  }
+  .pin.b { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.85), var(--pin-blue) 48%, rgba(0,0,0,.35)); }
+  .pin.g { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.85), var(--pin-green) 48%, rgba(0,0,0,.35)); }
+  .pin.a { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.85), var(--pin-amber) 48%, rgba(0,0,0,.35)); }
+
+  .card h2, .card h3 { font-family: "Archivo", sans-serif; letter-spacing: -.01em; }
+  .card h2 { font-size: 1.15rem; font-weight: 900; margin: 2px 0 4px; }
+  .card h3 { font-size: 1.02rem; font-weight: 800; margin: 2px 0 4px; }
+  .tag {
+    display: inline-block; font-family: "Caveat", cursive; font-size: 1.15rem; font-weight: 700;
+    color: #b24a2e; line-height: 1; margin-bottom: 6px;
+  }
+  .card p { margin: 0 0 8px; line-height: 1.5; font-size: .93rem; color: var(--ink); }
+  .card p.muted { color: var(--ink-soft); font-size: .86rem; }
+  ul.clean { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+  ul.clean li { position: relative; padding-left: 20px; font-size: .9rem; line-height: 1.45; }
+  ul.clean li::before { content: ""; position: absolute; left: 4px; top: .5em; width: 6px; height: 6px; border-radius: 50%; background: #b24a2e; }
+  ul.check li::before { content: "✓"; left: 0; top: 0; width: auto; height: auto; background: none; color: #1f8a4c; font-weight: 900; }
+  ul.ask li::before { content: "→"; left: 0; top: 0; width: auto; height: auto; background: none; color: #b24a2e; font-weight: 900; }
+
+  /* flow strip */
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; margin-top: 8px; }
+  .step {
+    flex: 1 1 130px; min-width: 0; background: var(--paper); border: 1.5px solid var(--line);
+    border-radius: 10px; padding: 11px 12px; position: relative;
+  }
+  .step .n { font-family: "Caveat", cursive; font-size: 1.2rem; font-weight: 700; color: #b24a2e; line-height: 1; }
+  .step b { display: block; font-size: .92rem; margin: 2px 0 2px; font-family: "Archivo"; font-weight: 800; }
+  .step span { font-size: .78rem; color: var(--ink-soft); line-height: 1.35; }
+  .flow .arrow { align-self: center; color: var(--ink-soft); font-weight: 900; font-size: 1.1rem; flex: 0 0 auto; }
+  .loopnote { font-family: "Caveat", cursive; font-size: 1.1rem; color: #b24a2e; margin-top: 10px; text-align: right; }
+
+  /* modules sub-grid */
+  .modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 12px; margin-top: 10px; }
+  .module { background: var(--paper); border-radius: 10px; padding: 13px; border: 1.5px solid var(--line); }
+  .module .num {
+    display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+    background: #b24a2e; color: #fff; font-weight: 900; font-size: .85rem; margin-bottom: 7px;
+  }
+  .module b { font-family: "Archivo"; font-weight: 800; font-size: .95rem; display: block; margin-bottom: 3px; }
+  .module span { font-size: .82rem; color: var(--ink-soft); line-height: 1.4; }
+
+  /* roadmap */
+  .phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; margin-top: 10px; }
+  .phase { background: var(--paper); border-radius: 10px; padding: 14px; border-top: 5px solid var(--pc, #b24a2e); box-shadow: 0 2px 4px rgba(0,0,0,.08); }
+  .phase .when { font-family: "Caveat", cursive; font-size: 1.15rem; color: var(--pc); font-weight: 700; line-height: 1; }
+  .phase b { font-family: "Archivo"; font-weight: 900; font-size: 1rem; display: block; margin: 2px 0 8px; }
+  .phase ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+  .phase li { font-size: .84rem; line-height: 1.4; }
+
+  /* chips (LLMs) */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .chip { font-size: .82rem; font-weight: 700; background: var(--paper); border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+  .chip .d { font-weight: 500; color: var(--ink-soft); }
+
+  .legend-note { text-align: center; color: var(--on-cork-soft); font-family: "Caveat", cursive; font-size: 1.15rem; margin: 30px 0 4px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { transition: none; }
+    .card:hover { transform: rotate(var(--rot,0deg)); }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800;900&family=Caveat:wght@600;700&display=swap">
+
+<div class="frame">
+  <div class="board">
+
+    <header class="masthead">
+      <div class="kicker">Project plan &middot; for review</div>
+      <h1>GEO Prompt Tracker</h1>
+      <p class="sub">See how often we show up in AI answers for the questions our customers actually ask &mdash; across every major model &mdash; and get a clear plan to show up more.</p>
+      <div class="meta-chips">
+        <span>Owner: Growth / SEO</span>
+        <span>Status: Proposal</span>
+        <span>Ask: green-light Phase 0</span>
+      </div>
+    </header>
+
+    <div class="grid">
+
+      <!-- WHY -->
+      <article class="card pink span2" style="--rot:-1.2deg">
+        <span class="pin"></span>
+        <div class="tag">Why now</div>
+        <h2>Search is moving into AI answers</h2>
+        <p>Buyers increasingly ask ChatGPT, Perplexity, Gemini and Google's AI Overviews instead of scrolling a results page. Those tools name a short list of brands &mdash; and if we're not on it, we're invisible, with no clicks to even measure the loss.</p>
+        <p class="muted">Today we have zero visibility into whether AI engines mention us or our competitors, which prompts trigger a mention, or what moves the needle. This tool gives us that visibility and a playbook to act on it.</p>
+      </article>
+
+      <!-- WHAT -->
+      <article class="card yellow" style="--rot:1.4deg">
+        <span class="pin a"></span>
+        <div class="tag">In one line</div>
+        <h2>What it does</h2>
+        <p>Track our <b>share of voice in AI answers</b> for real buyer prompts, benchmark it against competitors, and recommend exactly what to publish or fix to get mentioned more.</p>
+      </article>
+
+      <!-- HOW IT WORKS -->
+      <article class="card wide" style="--rot:-.4deg">
+        <span class="pin b"></span>
+        <div class="tag">The loop</div>
+        <h2>How it works</h2>
+        <div class="flow">
+          <div class="step"><span class="n">1</span><b>Add URLs</b><span>Our site + competitor links</span></div>
+          <span class="arrow" aria-hidden="true">&rarr;</span>
+          <div class="step"><span class="n">2</span><b>Scrape keywords</b><span>Topics, entities, themes</span></div>
+          <span class="arrow" aria-hidden="true">&rarr;</span>
+          <div class="step"><span class="n">3</span><b>Suggest prompts</b><span>Questions buyers ask LLMs</span></div>
+          <span class="arrow" aria-hidden="true">&rarr;</span>
+          <div class="step"><span class="n">4</span><b>Track on LLMs</b><span>Run across the models</span></div>
+          <span class="arrow" aria-hidden="true">&rarr;</span>
+          <div class="step"><span class="n">5</span><b>Score &amp; advise</b><span>Mentions, gaps, actions</span></div>
+          <span class="arrow" aria-hidden="true">&rarr;</span>
+          <div class="step"><span class="n">6</span><b>Act</b><span>Publish &amp; fix content</span></div>
+        </div>
+        <p class="loopnote">&hellip;then re-track to see the score move &#8635;</p>
+      </article>
+
+      <!-- MODULES -->
+      <article class="card wide" style="--rot:.5deg">
+        <span class="pin g"></span>
+        <div class="tag">The build</div>
+        <h2>Five building blocks</h2>
+        <div class="modules">
+          <div class="module"><span class="num">1</span><b>Crawl &amp; ingest</b><span>Paste our site and competitor URLs; crawler pulls pages, topics and entities.</span></div>
+          <div class="module"><span class="num">2</span><b>Keyword mining</b><span>Extract and cluster keywords and themes by search intent.</span></div>
+          <div class="module"><span class="num">3</span><b>Prompt engine</b><span>Turn keywords into realistic buyer prompts, ranked by commercial intent.</span></div>
+          <div class="module"><span class="num">4</span><b>Multi-LLM tracker</b><span>Run prompts on a schedule; detect brand &amp; competitor mentions, citations, position, sentiment.</span></div>
+          <div class="module"><span class="num">5</span><b>Score &amp; recommend</b><span>Share of voice, citation rate, gaps, and a prioritised action list.</span></div>
+        </div>
+      </article>
+
+      <!-- LLMs -->
+      <article class="card blue" style="--rot:-1.5deg">
+        <span class="pin"></span>
+        <div class="tag">Where we track</div>
+        <h2>Models to cover</h2>
+        <div class="chips">
+          <span class="chip">ChatGPT</span>
+          <span class="chip">Claude</span>
+          <span class="chip">Gemini</span>
+          <span class="chip">Perplexity</span>
+          <span class="chip">Google AI Overviews</span>
+          <span class="chip">Copilot</span>
+        </div>
+        <p class="muted" style="margin-top:12px">Start with the citation-heavy engines &mdash; <b>Perplexity</b> and <b>AI Overviews</b> &mdash; where getting cited turns directly into visibility and links.</p>
+      </article>
+
+      <!-- PLAYBOOK -->
+      <article class="card green span2" style="--rot:1deg">
+        <span class="pin g"></span>
+        <div class="tag">The payoff</div>
+        <h2>How we increase AI mentions</h2>
+        <ul class="clean check">
+          <li>Publish <b>answer-first, quotable content</b> &mdash; clear claims, stats and definitions LLMs can lift.</li>
+          <li>Earn mentions on sources models trust: <b>Reddit, Wikipedia, YouTube, G2 / Capterra, industry listicles, PR</b>.</li>
+          <li>Build <b>comparison and "best&nbsp;X" pages</b> &mdash; the format LLMs reach for when recommending.</li>
+          <li>Add <b>structured data, clear entity naming, and author E-E-A-T</b> signals.</li>
+          <li>Keep facts <b>fresh and consistent</b> across the web so models corroborate them.</li>
+          <li>Grow <b>topical authority</b> with content clusters around our core themes.</li>
+        </ul>
+      </article>
+
+      <!-- ROADMAP -->
+      <article class="card wide" style="--rot:-.3deg">
+        <span class="pin a"></span>
+        <div class="tag">The plan</div>
+        <h2>Roadmap</h2>
+        <div class="phases">
+          <div class="phase" style="--pc:#d8453c">
+            <div class="when">Weeks 1&ndash;4</div>
+            <b>Phase 0 &middot; MVP</b>
+            <ul>
+              <li>URL crawl + keyword scrape</li>
+              <li>Prompt suggestions</li>
+              <li>Manual check on one LLM</li>
+              <li>Validate on 1&ndash;2 of our brands</li>
+            </ul>
+          </div>
+          <div class="phase" style="--pc:#e0a52e">
+            <div class="when">Weeks 5&ndash;10</div>
+            <b>Phase 1 &middot; Tracking</b>
+            <ul>
+              <li>Automated multi-LLM runs</li>
+              <li>Mention &amp; citation detection</li>
+              <li>Dashboard: share of voice</li>
+              <li>Scheduled refresh</li>
+            </ul>
+          </div>
+          <div class="phase" style="--pc:#3aa667">
+            <div class="when">Weeks 11&ndash;18</div>
+            <b>Phase 2 &middot; Intelligence</b>
+            <ul>
+              <li>Competitor benchmarking</li>
+              <li>Sentiment + prompt clusters</li>
+              <li>Recommendations engine</li>
+              <li>Alerts &amp; exports</li>
+            </ul>
+          </div>
+          <div class="phase" style="--pc:#3f7fd8">
+            <div class="when">Weeks 19+</div>
+            <b>Phase 3 &middot; Scale</b>
+            <ul>
+              <li>More engines + API</li>
+              <li>Historical trends</li>
+              <li>Team seats &amp; roles</li>
+              <li>Integrations + pricing</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <!-- TECH -->
+      <article class="card" style="--rot:1.3deg">
+        <span class="pin b"></span>
+        <div class="tag">Under the hood</div>
+        <h3>Tech approach</h3>
+        <ul class="clean">
+          <li><b>Crawl:</b> headless browser + sitemap parse</li>
+          <li><b>Keywords:</b> NLP entity/keyphrase extraction</li>
+          <li><b>Prompts:</b> LLM generation</li>
+          <li><b>Tracking:</b> model APIs + mention matching (NER + fuzzy)</li>
+          <li><b>Stack:</b> Next.js, worker queue, Postgres, scheduled jobs</li>
+        </ul>
+      </article>
+
+      <!-- METRICS -->
+      <article class="card yellow" style="--rot:-1.1deg">
+        <span class="pin a"></span>
+        <div class="tag">How we measure</div>
+        <h3>Success metrics</h3>
+        <ul class="clean">
+          <li><b>Share of voice</b> in AI answers</li>
+          <li><b>Citation rate</b> &amp; average position</li>
+          <li><b>Sentiment</b> of mentions</li>
+          <li>Mention <b>trend over time</b></li>
+          <li>Business: pipeline influenced</li>
+        </ul>
+      </article>
+
+      <!-- RISKS -->
+      <article class="card pink" style="--rot:.8deg">
+        <span class="pin"></span>
+        <div class="tag">Watch-outs</div>
+        <h3>Risks &amp; open questions</h3>
+        <ul class="clean">
+          <li>Compliant ways to query engines at scale (ToS)</li>
+          <li>Cost: prompts &times; engines &times; frequency</li>
+          <li>Accuracy of "mention" attribution</li>
+          <li>LLM answers vary &mdash; need sampling / averaging</li>
+        </ul>
+      </article>
+
+      <!-- THE ASK -->
+      <article class="card span2" style="--rot:-.6deg">
+        <span class="pin"></span>
+        <div class="tag">Decision needed</div>
+        <h2>What we're asking for</h2>
+        <ul class="clean ask">
+          <li>Green-light <b>Phase 0</b> (4 weeks) to prove the concept</li>
+          <li>Budget for <b>LLM API usage</b> during tracking</li>
+          <li><b>1 engineer + 0.5 PM</b> for the MVP</li>
+          <li>Sign-off on the <b>competitor list</b> to benchmark against</li>
+        </ul>
+      </article>
+
+    </div>
+
+    <p class="legend-note">Red = decision &middot; amber = in motion &middot; green = payoff &nbsp;—&nbsp; tap any note to straighten it</p>
+
+  </div>
+</div>
