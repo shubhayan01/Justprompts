@@ -1,97 +1,198 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JustPrompt — GEO Tracker</title>
+<title>JustPrompt — GEO / AEO Visibility Tracker</title>
+<meta name="description" content="See how often AI assistants mention and cite your brand versus competitors.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800;900&family=Caveat:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="frame"><div class="board">
 
-  <header class="masthead">
-    <div class="kicker">GEO / AEO visibility</div>
-    <h1>JustPrompt</h1>
-    <p class="sub">Scan your whole site, see every keyword, turn them into the questions buyers ask AI — then check how you rank in the answers.</p>
+  <!-- Top bar -->
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="logo">J</span>
+      <span class="bt"><strong>JustPrompt</strong><small>GEO / AEO visibility tracker</small></span>
+    </a>
+    <div class="spacer"></div>
+    <div id="engineStatus" class="engines"><span class="muted small">Checking engines…</span></div>
   </header>
 
-  <!-- keys (compact) -->
-  <section class="card tilt"><span class="pin b"></span>
-    <div id="engineStatus" class="engines"><span class="muted">Checking keys…</span></div>
-    <div id="keyHint"></div>
-    <label class="checkbox small"><input type="checkbox" id="preferFree" checked> Free engines only</label>
-  </section>
+  <main class="wrap">
 
-  <!-- STEP 1 — scan whole site -->
-  <section class="card"><span class="pin"></span>
-    <div class="tag">Step 1</div>
-    <h2>Scan your website</h2>
-    <div class="row">
-      <div style="flex:3 1 260px"><label>Website URL</label><input type="text" id="siteUrl" placeholder="justwords.co.uk"></div>
-      <div style="flex:1 1 90px"><label>Max pages</label><input type="number" id="maxPages" value="150" min="1" max="400"></div>
+    <div class="pagehead">
+      <h1>Track your brand across AI answers</h1>
+      <p>Scan your site, turn its topics into the questions buyers actually ask AI assistants, then measure how often ChatGPT, Gemini, Claude &amp; others name and cite you — versus your competitors.</p>
     </div>
-    <details style="margin-top:8px">
-      <summary class="small" style="cursor:pointer;color:var(--ink-soft)">Advanced (optional): brand name, aliases, competitors</summary>
-      <div class="row">
-        <div><label>Brand name (auto from URL if blank)</label><input type="text" id="brandName" placeholder="Justwords"></div>
-        <div><label>Aliases (comma-sep)</label><input type="text" id="brandAliases" placeholder="Just Words, JW"></div>
+
+    <!-- Tabs -->
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
+      <button class="tab active" data-tab="setup" role="tab">Setup</button>
+      <button class="tab" data-tab="website" role="tab">Website</button>
+      <button class="tab" data-tab="keywords" role="tab">Keywords</button>
+      <button class="tab" data-tab="ranks" role="tab">Google Rank</button>
+      <button class="tab" data-tab="prompts" role="tab">Prompts</button>
+      <button class="tab" data-tab="results" role="tab">Results</button>
+    </nav>
+
+    <!-- Engine status / keys -->
+    <section class="card tabpanel active" data-tab="setup">
+      <div class="tag">Engines</div>
+      <h2>Answer engines</h2>
+      <p class="muted">Every engine with a key is live. Scanning &amp; keywords work with no key; ranking needs at least one. New here? <b>Load demo data</b> to explore a fully-populated dashboard instantly — no keys, no waiting.</p>
+      <div class="toolbar" style="margin-top:0 0 4px"><button id="demoBtn" class="ghost small">✨ Load demo data</button><span id="demoStatus" class="muted small"></span></div>
+      <div id="keyHint"></div>
+      <details id="keysPanel">
+        <summary>🔑 Add / manage API keys</summary>
+        <p class="muted small">Saved in <b>this browser</b> and sent to the server (held in memory, never written to disk). Free Groq key: <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.</p>
+        <div class="row">
+          <div><label>Groq API key <span class="muted">(free)</span></label><input type="password" id="key_groq" placeholder="gsk_…" autocomplete="off"></div>
+          <div><label>Gemini API key <span class="muted">(free · live web)</span></label><input type="password" id="key_gemini" placeholder="AIza…" autocomplete="off"></div>
+        </div>
+        <div class="row">
+          <div><label>OpenRouter API key <span class="muted">(all models)</span></label><input type="password" id="key_openrouter" placeholder="sk-or-…" autocomplete="off"></div>
+        </div>
+        <details style="margin-top:8px"><summary class="small" style="cursor:pointer;color:var(--ink-soft)">More: OpenAI, Anthropic, Perplexity</summary>
+          <div class="row">
+            <div><label>OpenAI</label><input type="password" id="key_openai" autocomplete="off"></div>
+            <div><label>Anthropic</label><input type="password" id="key_anthropic" autocomplete="off"></div>
+            <div><label>Perplexity</label><input type="password" id="key_perplexity" autocomplete="off"></div>
+          </div>
+        </details>
+        <div class="toolbar"><button id="saveKeysBtn">Save keys</button><button id="clearKeysBtn" class="ghost small">Clear saved</button><span id="keysStatus" class="muted small"></span></div>
+      </details>
+      <label class="checkbox small"><input type="checkbox" id="preferFree" checked> Use free engines only</label>
+      <label class="checkbox small" style="margin-left:18px"><input type="checkbox" id="ghostToggle"> Include real web engines <span class="muted">(headless browser — ChatGPT &amp; Google AI, no API cost)</span></label>
+      <div id="ghostHint" class="hint hidden" style="margin-top:10px">
+        <b>Headless browser engines are best-effort.</b> They drive the real ChatGPT &amp; Google pages locally — no API cost, but they can need a one-time login or hit a CAPTCHA, and may break when those sites change. Run locally with <code>npm i playwright &amp;&amp; npx playwright install chromium</code>, and <code>GHOST_HEADLESS=0</code> for the first sign-in.
       </div>
-      <label>Competitors (optional — we also auto-discover them)</label>
-      <div id="competitors"></div>
-      <button id="addCompBtn" class="ghost small" style="margin-top:6px">+ Add competitor</button>
-    </details>
-    <div class="toolbar">
-      <button id="scanBtn">⛏ Scan whole site</button>
-      <span id="scanStatus" class="muted"></span>
-    </div>
-    <div id="recent" class="proj-list"></div>
-    <div id="scanOut"></div>
-  </section>
+    </section>
 
-  <!-- STEP 2 — keywords -->
-  <section id="kwCard" class="card yellow hidden"><span class="pin a"></span>
-    <div class="tag">Step 2</div>
-    <h2>Keywords found <span id="kwCount" class="muted" style="font-weight:700"></span></h2>
-    <div class="toolbar">
-      <button id="suggestBtn">→ Suggest prompts</button>
-      <button id="refineBtn" class="ghost small">Refine &amp; cluster with AI</button>
-      <button id="copyKwBtn" class="ghost small">Copy all</button>
-      <span id="kwStatus" class="muted"></span>
-    </div>
-    <div id="kwOut" style="max-height:340px;overflow:auto;margin-top:8px"></div>
-  </section>
+    <!-- Website -->
+    <section class="card tabpanel" data-tab="website" id="scanCard">
+      <div class="tag">Website</div>
+      <h2>Scan your website</h2>
+      <p class="muted">We crawl your pages to learn what you're about — no need to list keywords yourself.</p>
+      <div class="row">
+        <div style="flex:3 1 260px"><label>Website URL</label><input type="text" id="siteUrl" placeholder="justwords.co.uk"></div>
+        <div style="flex:1 1 90px"><label>Max pages</label><input type="number" id="maxPages" value="150" min="1" max="400"></div>
+      </div>
+      <details style="margin-top:10px">
+        <summary class="small" style="cursor:pointer;color:#8a6a00;font-weight:700">Advanced: brand name, aliases, competitors</summary>
+        <div class="row">
+          <div><label>Brand name <span class="muted">(auto from URL if blank)</span></label><input type="text" id="brandName" placeholder="Justwords"></div>
+          <div><label>Aliases <span class="muted">(comma-separated)</span></label><input type="text" id="brandAliases" placeholder="Just Words, JW"></div>
+        </div>
+        <label>Competitors <span class="muted">(optional — we also auto-discover them)</span></label>
+        <div id="competitors"></div>
+        <button id="addCompBtn" class="ghost small" style="margin-top:8px">+ Add competitor</button>
+      </details>
+      <div class="toolbar">
+        <button id="scanBtn">Scan whole site</button>
+        <span id="scanStatus" class="muted small"></span>
+      </div>
+      <div id="recent" class="proj-list"></div>
+      <div id="scanOut"></div>
+    </section>
 
-  <!-- STEP 3 — prompts -->
-  <section id="promptCard" class="card tilt hidden"><span class="pin b"></span>
-    <div class="tag">Step 3</div>
-    <h2>Suggested prompts</h2>
-    <p class="muted small">Real questions buyers ask AI assistants. We don't mention your brand — so we see if you get named on your own.</p>
-    <div class="toolbar">
-      <button id="genPromptsBtn" class="ghost small">Regenerate</button>
-      <input type="number" id="promptCount" value="15" min="3" max="40" style="width:66px;flex:0 0 auto">
-      <button id="addPromptBtn" class="ghost small">+ Add your own</button>
-      <button id="savePromptsBtn" class="ghost small">Save edits</button>
-      <span id="promptStatus" class="muted"></span>
-    </div>
-    <div id="promptOut"></div>
-    <h3 style="margin-top:14px">Engines to check</h3>
-    <div id="trackEngines" class="engines"></div>
-    <div class="toolbar"><button id="rankBtn" class="pin-btn">▶ Check ranking</button><span id="trackStatus" class="muted"></span></div>
-  </section>
+    <!-- Keywords -->
+    <section id="kwCard" class="card tabpanel" data-tab="keywords">
+      <div class="tag">Keywords</div>
+      <h2>Keywords found <span id="kwCount" class="muted" style="font-weight:500"></span></h2>
+      <p class="muted">The topics your site ranks for, grouped by theme. These become the prompts in the next step.</p>
+      <div class="toolbar">
+        <button id="suggestBtn">Suggest prompts →</button>
+        <button id="refineBtn" class="ghost small">Refine &amp; cluster with AI</button>
+        <button id="copyKwBtn" class="ghost small">Copy all</button>
+        <span id="kwStatus" class="muted small"></span>
+      </div>
+      <div id="kwOut" style="max-height:360px;overflow:auto;margin-top:14px"></div>
+    </section>
 
-  <!-- STEP 4 — ranking -->
-  <section id="scoreCard" class="card green hidden"><span class="pin g"></span>
-    <div class="tag">Step 4</div>
-    <h2>Your ranking in AI answers</h2>
-    <div id="scoreOut"></div>
-  </section>
+    <!-- Google Rank tracking (DataForSEO) -->
+    <section id="rankCard" class="card tabpanel" data-tab="ranks">
+      <div class="tag">Google Rank</div>
+      <h2>Google keyword rank tracking</h2>
+      <p class="muted">Where your site actually ranks on Google for your keywords — live positions, movement since last check, and which competitor outranks you. Powered by DataForSEO.</p>
 
-  <p class="hand" style="text-align:center;color:var(--on-cork-soft);font-size:1.1rem;margin-top:22px">
-    Scan site → keywords → prompts → ranking &#8635;
-  </p>
+      <div id="rankConnBar" class="hint" style="margin-top:4px"></div>
+
+      <details id="rankSettings">
+        <summary>⚙️ DataForSEO credentials &amp; location</summary>
+        <p class="muted small">Basic-auth <b>login + password</b> (not a single token). Held in server memory. Get them at <a href="https://app.dataforseo.com/api-access" target="_blank" rel="noopener">app.dataforseo.com/api-access</a>.</p>
+        <div class="row">
+          <div><label>Login <span class="muted">(account email)</span></label><input type="text" id="dfs_login" placeholder="you@example.com" autocomplete="off"></div>
+          <div><label>Password</label><input type="password" id="dfs_password" placeholder="••••••••" autocomplete="off"></div>
+        </div>
+        <div class="toolbar"><button id="saveDfsBtn" class="small">Save &amp; test</button><span id="dfsStatus" class="muted small"></span></div>
+      </details>
+
+      <div class="row" style="margin-top:12px">
+        <div style="flex:1 1 200px"><label>Search location</label>
+          <select id="rankLocation">
+            <option>United Kingdom</option>
+            <option>United States</option>
+            <option>India</option>
+            <option>Canada</option>
+            <option>Australia</option>
+            <option>United Arab Emirates</option>
+            <option>Singapore</option>
+          </select>
+        </div>
+        <div style="flex:0 1 140px"><label>Language</label>
+          <select id="rankLanguage">
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="hi">Hindi</option>
+          </select>
+        </div>
+      </div>
+
+      <label style="margin-top:12px;display:block">Keywords to track <span class="muted" id="rankKwCount"></span></label>
+      <p class="muted small" style="margin:2px 0 6px">One per line. These default to the keywords mined from your site — edit freely. Each keyword = 1 Google SERP lookup (~$0.0035).</p>
+      <textarea id="rankKeywords" rows="8" style="width:100%;font-family:inherit;font-size:14px;padding:10px;border-radius:10px" placeholder="content marketing agency&#10;seo services uk&#10;…"></textarea>
+
+      <div class="toolbar">
+        <button id="rankGoBtn" class="pin-btn">Check Google rankings</button>
+        <button id="saveRankCfgBtn" class="ghost small">Save keyword list</button>
+        <span id="rankStatus" class="muted small"></span>
+      </div>
+      <div id="rankOut" style="margin-top:16px"><p class="muted">No rank check yet. Set your keywords above and click <b>Check Google rankings</b> — or load demo data from <b>Setup</b> to preview the dashboard.</p></div>
+    </section>
+
+    <!-- Prompts -->
+    <section id="promptCard" class="card tabpanel" data-tab="prompts">
+      <div class="tag">Prompts</div>
+      <h2>Prompts to test</h2>
+      <p class="muted">Real questions buyers ask AI assistants. We never mention your brand — so we can see whether you get named on your own.</p>
+      <div class="toolbar">
+        <button id="genPromptsBtn" class="ghost small">Regenerate</button>
+        <input type="number" id="promptCount" value="15" min="3" max="40" style="width:70px;flex:0 0 auto" aria-label="Number of prompts">
+        <button id="addPromptBtn" class="ghost small">+ Add your own</button>
+        <button id="savePromptsBtn" class="ghost small">Save edits</button>
+        <span id="promptStatus" class="muted small"></span>
+      </div>
+      <div id="promptOut" style="margin-top:14px"></div>
+      <h3>Engines to check</h3>
+      <div id="trackEngines" class="engines"></div>
+      <div class="toolbar"><button id="rankBtn" class="pin-btn">Check ranking</button><span id="trackStatus" class="muted small"></span></div>
+    </section>
+
+    <!-- Results -->
+    <section id="scoreCard" class="card tabpanel" data-tab="results">
+      <div class="tag">Results</div>
+      <h2>Your ranking in AI answers</h2>
+      <div id="scoreOut"><p class="muted">No results yet. Run a ranking check from the <b>Prompts</b> tab, or load demo data from <b>Setup</b> to explore a full dashboard.</p></div>
+    </section>
+
+  </main>
 
 </div></div>
 <script src="app.js"></script>

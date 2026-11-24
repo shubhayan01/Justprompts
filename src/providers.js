@@ -4,7 +4,7 @@
 // its Messages API. Each call returns a normalised shape:
 //   { text, citations: [{url, title}], provider, model }
 
-import { KEYS } from './config.js';
+import { getKeys } from './config.js';
 
 const TIMEOUT_MS = 75_000;
 
@@ -51,11 +51,11 @@ async function postJSON(url, { headers, body, timeout = TIMEOUT_MS, retries = 3 
 
 // ── OpenAI-compatible providers ──────────────────────────────────────────────
 const OPENAI_COMPAT = {
-  openrouter: { base: 'https://openrouter.ai/api/v1', key: () => KEYS.OPENROUTER_API_KEY,
+  openrouter: { base: 'https://openrouter.ai/api/v1', key: () => getKeys().OPENROUTER_API_KEY,
     extraHeaders: { 'HTTP-Referer': 'https://localhost', 'X-Title': 'JustPrompt GEO Tracker' } },
-  groq:       { base: 'https://api.groq.com/openai/v1', key: () => KEYS.GROQ_API_KEY },
-  openai:     { base: 'https://api.openai.com/v1', key: () => KEYS.OPENAI_API_KEY },
-  perplexity: { base: 'https://api.perplexity.ai', key: () => KEYS.PERPLEXITY_API_KEY },
+  groq:       { base: 'https://api.groq.com/openai/v1', key: () => getKeys().GROQ_API_KEY },
+  openai:     { base: 'https://api.openai.com/v1', key: () => getKeys().OPENAI_API_KEY },
+  perplexity: { base: 'https://api.perplexity.ai', key: () => getKeys().PERPLEXITY_API_KEY },
 };
 
 async function chatOpenAICompat(providerName, { model, messages, temperature = 0.4, json = false }) {
@@ -85,7 +85,7 @@ async function chatOpenAICompat(providerName, { model, messages, temperature = 0
 
 // ── Gemini (direct) with Google Search grounding ─────────────────────────────
 async function chatGemini({ model, messages, temperature = 0.4, json = false, grounding = false }) {
-  const key = KEYS.GEMINI_API_KEY;
+  const key = getKeys().GEMINI_API_KEY;
   const sys = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
   const contents = messages
     .filter((m) => m.role !== 'system')
@@ -109,7 +109,7 @@ async function chatGemini({ model, messages, temperature = 0.4, json = false, gr
 
 // ── Anthropic (direct) ───────────────────────────────────────────────────────
 async function chatAnthropic({ model, messages, temperature = 0.4, json = false }) {
-  const key = KEYS.ANTHROPIC_API_KEY;
+  const key = getKeys().ANTHROPIC_API_KEY;
   const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
   const msgs = messages
     .filter((m) => m.role !== 'system')
@@ -146,6 +146,15 @@ function normaliseCitations(arr) {
 export async function chat({ provider, model, messages, temperature = 0.4, json = false, grounding = false }) {
   if (provider === 'gemini') return chatGemini({ model, messages, temperature, json, grounding });
   if (provider === 'anthropic') return chatAnthropic({ model, messages, temperature, json });
+  if (provider === 'ghost') {
+    // Headless-browser engine: scrape the real ChatGPT / Google AI page.
+    // model carries the target ('chatgpt-web' | 'google-ai'); lazy-import so
+    // Playwright is only loaded when this engine is actually used.
+    const { ghostChat } = await import('./ghost.js');
+    const prompt = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
+    const target = model === 'google-ai' ? 'google' : 'chatgpt';
+    return ghostChat({ target, prompt });
+  }
   if (OPENAI_COMPAT[provider]) return chatOpenAICompat(provider, { model, messages, temperature, json });
   throw new Error(`unknown provider: ${provider}`);
 }

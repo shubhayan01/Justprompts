@@ -2,14 +2,15 @@ import express from 'express';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PORT, engineStatus, resolveAnalysisModel, anyKeyPresent, ENGINES, KEYS } from './src/config.js';
-import { pickModel } from './src/models.js';
+import { PORT, engineStatus, resolveAnalysisModel, anyKeyPresent, ENGINES, KEY_NAMES, getKeys, setKeys, keySources, ghostEnabled, setGhost, setDfs, dfsConfigured, dfsSource, dfsLoginMasked } from './src/config.js';
+import { pickModel, clearModelCache } from './src/models.js';
 import * as store from './src/store.js';
 import { crawlSite, extractKeywords, brandFromDomain, domainOf, normalizeUrl } from './src/crawl.js';
 import { refineKeywords, extractSiteKeywords } from './src/keywords.js';
 import { generatePrompts } from './src/prompts.js';
 import { trackProject } from './src/track.js';
 import { computeScore, recommend } from './src/score.js';
+import { trackRanks, validateDfs, defaultTrackedKeywords, snapshotOf } from './src/ranktrack.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -62,10 +63,60 @@ app.get('/api/health', wrap(async (req, res) => {
   }
   ok(res, {
     anyKey: anyKeyPresent(),
-    keys: Object.fromEntries(Object.entries(KEYS).map(([k, v]) => [k, !!v])),
+    keys: keySources(), // { KEY_NAME: 'session' | 'env' | null }
+    ghost: ghostEnabled(),
     engines,
     analysis,
   });
+}));
+
+// ── Ghost (headless browser) engine toggle ─────────────────────────────────────
+app.post('/api/ghost', (req, res) => {
+  setGhost(!!(req.body && req.body.enabled));
+  ok(res, { ghost: ghostEnabled() });
+});
+
+// ── Runtime API keys (set from the UI; stored in memory, merged over env) ──────
+app.get('/api/keys', (req, res) => ok(res, { sources: keySources() }));
+
+app.post('/api/keys', (req, res) => {
+  const b = req.body || {};
+  // Accept either full env names or short names (groq, gemini, ...).
+  const short = { groq: 'GROQ_API_KEY', gemini: 'GEMINI_API_KEY', openrouter: 'OPENROUTER_API_KEY', openai: 'OPENAI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', perplexity: 'PERPLEXITY_API_KEY' };
+  const patch = {};
+  for (const [k, v] of Object.entries(b)) {
+    const name = KEY_NAMES.includes(k) ? k : short[k.toLowerCase()];
+    if (name) patch[name] = v;
+  }
+  setKeys(patch);
+  clearModelCache(); // re-discover models with the new key(s)
+  ok(res, { sources: keySources() });
+});
+
+// ── DataForSEO credentials (Google keyword rank tracking) ──────────────────────
+app.get('/api/dataforseo', (req, res) => ok(res, {
+  configured: dfsConfigured(), source: dfsSource(), login: dfsLoginMasked(),
+}));
+
+app.post('/api/dataforseo', wrap(async (req, res) => {
+  const b = req.body || {};
+  // Accept login/password (or email as an alias for login).
+  if ('login' in b || 'email' in b || 'password' in b) {
+    setDfs({ login: b.login ?? b.email, password: b.password });
+  }
+  // Validate against the account so the UI can confirm it works + show balance.
+  let account = null, error = null;
+  if (dfsConfigured()) {
+    try { account = await validateDfs(); } catch (e) { error = e.message; }
+  }
+  ok(res, { configured: dfsConfigured(), source: dfsSource(), login: dfsLoginMasked(), account, error });
+}));
+
+// ── Demo data (no API keys needed) ─────────────────────────────────────────────
+app.post('/api/demo', wrap(async (req, res) => {
+  const { buildDemoProject } = await import('./src/demo.js');
+  const project = await store.insertProject(buildDemoProject());
+  ok(res, { project });
 }));
 
 // ── Projects ──────────────────────────────────────────────────────────────────
@@ -220,6 +271,11 @@ app.get('/api/projects/:id/track', async (req, res) => {
   });
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
+  // Heartbeat: a comment line every 15s keeps the SSE connection alive through
+  // proxies/browsers during long runs (prevents mid-run "connection lost" errors).
+  const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 15_000);
+  req.on('close', () => clearInterval(heartbeat));
+
   const selectedPrompts = promptIds ? project.prompts.filter((p) => promptIds.includes(p.id)) : project.prompts;
   send('start', { total: selectedPrompts.length, engines: engineIds });
 
@@ -243,10 +299,81 @@ app.get('/api/projects/:id/track', async (req, res) => {
         leaderboard: summary.leaderboard.map((l) => ({ name: l.name, shareOfVoice: l.shareOfVoice })),
       });
     });
-    send('done', { summary, rec, runs });
+    send('done', { summary, rec, runs, snapshots: project.snapshots || [] });
   } catch (e) {
     send('error', { error: e.message });
   }
+  clearInterval(heartbeat);
+  res.end();
+});
+
+// ── Google keyword rank tracking (DataForSEO) ─────────────────────────────────
+// Stored results + suggested keyword set + config.
+app.get('/api/projects/:id/ranks', wrap(async (req, res) => {
+  const project = await store.getProject(req.params.id);
+  if (!project) return fail(res, 404, 'not found');
+  ok(res, {
+    configured: dfsConfigured(),
+    source: dfsSource(),
+    login: dfsLoginMasked(),
+    results: project.rankResults || null,
+    snapshots: project.rankSnapshots || [],
+    config: project.rankConfig || { location: 'United Kingdom', language: 'en' },
+    trackedKeywords: project.trackedKeywords?.length ? project.trackedKeywords : defaultTrackedKeywords(project),
+  });
+}));
+
+// Save the tracked-keyword set + location/language for a project.
+app.put('/api/projects/:id/ranks/config', wrap(async (req, res) => {
+  const project = await store.getProject(req.params.id);
+  if (!project) return fail(res, 404, 'not found');
+  const b = req.body || {};
+  const kws = cleanList(b.keywords).slice(0, 100);
+  const config = {
+    location: (b.location || project.rankConfig?.location || 'United Kingdom').toString(),
+    language: (b.language || project.rankConfig?.language || 'en').toString(),
+  };
+  await store.mutate(project.id, (p) => { p.trackedKeywords = kws; p.rankConfig = config; });
+  ok(res, { trackedKeywords: kws, config });
+}));
+
+// Run a live rank check (SSE streaming progress).
+app.get('/api/projects/:id/ranks/track', async (req, res) => {
+  const project = await store.getProject(req.params.id);
+  if (!project) return fail(res, 404, 'not found');
+  if (!dfsConfigured()) return fail(res, 400, 'Add your DataForSEO login & password first (Rank tracking → settings).');
+
+  const qKeywords = req.query.keywords ? String(req.query.keywords).split('\n').map((s) => s.trim()).filter(Boolean) : null;
+  const keywords = qKeywords?.length ? qKeywords
+    : (project.trackedKeywords?.length ? project.trackedKeywords : defaultTrackedKeywords(project));
+  const location = req.query.location || project.rankConfig?.location;
+  const language = req.query.language || project.rankConfig?.language;
+  if (!keywords.length) return fail(res, 400, 'No keywords to track — add some on the Keywords tab.');
+
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 15_000);
+  req.on('close', () => clearInterval(heartbeat));
+  send('start', { total: keywords.length, location, language });
+
+  try {
+    const rankResults = await trackRanks({
+      project, keywords, location, language,
+      onProgress: (done, total, batch) => send('progress', { done, total, batch }),
+    });
+    await store.mutate(project.id, (p) => {
+      p.rankResults = rankResults;
+      p.rankConfig = { location: rankResults.location, language: rankResults.language };
+      p.trackedKeywords = keywords;
+      p.rankSnapshots = p.rankSnapshots || [];
+      p.rankSnapshots.push(snapshotOf(rankResults));
+    });
+    const fresh = await store.getProject(project.id);
+    send('done', { results: rankResults, snapshots: fresh.rankSnapshots || [] });
+  } catch (e) {
+    send('error', { error: e.message });
+  }
+  clearInterval(heartbeat);
   res.end();
 });
 
@@ -264,7 +391,7 @@ function cleanList(v) {
   return [];
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n  JustPrompt — GEO/AEO prompt tracker`);
   console.log(`  ▶  http://localhost:${PORT}\n`);
   if (!anyKeyPresent()) {
@@ -274,4 +401,15 @@ app.listen(PORT, () => {
     const en = engineStatus().filter((e) => e.enabled).map((e) => e.label);
     console.log(`  Engines live: ${en.join(', ') || '(none — check keys)'}\n`);
   }
+});
+
+// Don't crash with a raw stack trace if the port is already taken (the usual
+// cause of a confusing "system error" — a previous instance is still running).
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`\n  ✗ Port ${PORT} is already in use — JustPrompt is probably already running.`);
+    console.error(`    Open http://localhost:${PORT}, or stop the other instance, or set a different PORT in .env.\n`);
+    process.exit(1);
+  }
+  throw e;
 });

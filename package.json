@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "seed": "node seed_demo.js"
   },
   "engines": {
     "node": ">=20"
@@ -15,5 +16,8 @@
     "cheerio": "^1.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.2"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.65.1"
   }
 }

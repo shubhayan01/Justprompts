@@ -33,6 +33,18 @@ Put keys in a `.env` file (copy `.env.example`). You only need **one** to start;
 
 > **Recommended free combo:** `GEMINI_API_KEY` (live web + citations) + `GROQ_API_KEY` (fast analysis). Add `OPENROUTER_API_KEY` to cover ChatGPT/Claude/DeepSeek-class models too.
 
+### Optional: "ghost" browser engines — real ChatGPT & Google AI, no API cost
+
+Want the *actual consumer answers* instead of API ones, without spending on APIs? Turn on the **headless browser engines** (ChatGPT (web), Google AI). They drive the real pages with a local Chromium and scrape the answer + sources — **no API key, no cost**.
+
+These are **best-effort by design**: they can need a one-time login or hit a CAPTCHA, only run on your own machine (not a headless cloud host), and may break when those sites change their markup. Every failure shows up as a normal per-answer error — nothing crashes.
+
+```bash
+npm i playwright && npx playwright install chromium
+```
+
+Then enable them from the **Engines** card in the UI (or set `ENABLE_GHOST=1`). Keep `GHOST_HEADLESS=0` for the first ChatGPT sign-in / any CAPTCHA — the logged-in session is remembered in `data/ghost-profile`. Free API engines stay the reliable default; the ghost engines are a toggle-on spot-check.
+
 ```bash
 cp .env.example .env    # then paste your key(s)
 ```
@@ -45,6 +57,26 @@ npm start
 ```
 
 Open **http://localhost:4505**. The UI shows which engines are live (green) and which need a key.
+
+### Explore with demo data (no keys, no waiting)
+
+Want to see a fully-populated dashboard right away? Click **✨ Load demo data** in the UI, or run:
+
+```bash
+npm run seed
+```
+
+This creates a **Demo project (fake data)** — Acme CRM vs Zoho/HubSpot/Freshsales/Pipedrive with **8 weeks of history**: share-of-voice trend, leaderboard, per-engine rates, sentiment, most-cited websites and opportunity sites. Open it from **Recent**. Delete it anytime from the project list.
+
+### Why a real run takes a while (and how to speed it up)
+
+A full run makes `prompts × engines × ~2` API calls (one answer + one small "judge" call each), and **free tiers are rate-limited** — so large runs on free keys are slow and will retry on `429`. To go faster:
+
+- Start with **fewer prompts / one or two engines**, then scale up.
+- Set **`DISABLE_JUDGE=1`** (≈2× faster; still measures mentions, citations and share of voice — just skips LLM-scored rank/sentiment).
+- Raise **`TRACK_CONCURRENCY`** if you have an OpenRouter/paid key; lower it if you see many `429`s.
+
+Engines for each prompt now run **in parallel**, and the run streams progress with a keep-alive heartbeat so long runs don't drop.
 
 ## Deploy on Render
 
@@ -78,12 +110,15 @@ This repo includes a `render.yaml` blueprint. Two ways to ship it:
 ```
 server.js         Express API + SSE tracking stream + static hosting
 src/config.js     Engine registry: logical engines → provider/model bindings, free/live flags
-src/providers.js  Unified LLM layer (OpenAI-compatible, Gemini grounding, Anthropic)
+src/providers.js  Unified LLM layer (OpenAI-compatible, Gemini grounding, Anthropic, ghost)
+src/ghost.js      Optional headless-browser engine (real ChatGPT + Google AI, scraped)
 src/crawl.js      Server-side crawler + heuristic keyword extraction
 src/keywords.js   LLM keyword refinement/clustering
 src/prompts.js    Buyer-prompt generation
 src/track.js      Multi-engine runner + mention/citation/sentiment detection
-src/score.js      Share of voice, metrics, gaps, recommendations
+src/score.js      Share of voice, metrics, cited/opportunity sites, gaps, recommendations
+src/demo.js       Demo-data generator (8 weeks of fake results)
+seed_demo.js      CLI: npm run seed → load the demo project
 src/store.js      JSON datastore (no native deps)
-public/           Cork-board UI (index.html, styles.css, app.js)
+public/           Dashboard UI (index.html, styles.css, app.js)
 ```

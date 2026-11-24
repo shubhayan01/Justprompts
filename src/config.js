@@ -13,16 +13,67 @@ import 'dotenv/config';
 
 const env = (k, d = '') => (process.env[k] || d).trim();
 
-export const KEYS = {
-  OPENROUTER_API_KEY: env('OPENROUTER_API_KEY'),
-  GEMINI_API_KEY: env('GEMINI_API_KEY'),
-  GROQ_API_KEY: env('GROQ_API_KEY'),
-  OPENAI_API_KEY: env('OPENAI_API_KEY'),
-  ANTHROPIC_API_KEY: env('ANTHROPIC_API_KEY'),
-  PERPLEXITY_API_KEY: env('PERPLEXITY_API_KEY'),
-};
+export const KEY_NAMES = ['OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'PERPLEXITY_API_KEY'];
+
+// Keys come from the environment (.env / Render dashboard) AND can be set at
+// runtime from the UI (stored in memory, highest priority). getKeys() merges them.
+const ENV_KEYS = Object.fromEntries(KEY_NAMES.map((k) => [k, env(k)]));
+const overrides = {};
+
+export function getKeys() {
+  const out = { ...ENV_KEYS };
+  for (const k of KEY_NAMES) if (overrides[k]) out[k] = overrides[k];
+  return out;
+}
+export function setKeys(patch = {}) {
+  for (const k of KEY_NAMES) {
+    if (!(k in patch)) continue;
+    const v = (patch[k] ?? '').toString().trim();
+    if (v) overrides[k] = v; else delete overrides[k];
+  }
+}
+// Where each key currently comes from, for the UI: 'session' | 'env' | null.
+export function keySources() {
+  const out = {};
+  for (const k of KEY_NAMES) out[k] = overrides[k] ? 'session' : (ENV_KEYS[k] ? 'env' : null);
+  return out;
+}
 
 export const PORT = Number(env('PORT', '4505'));
+
+// ── DataForSEO (Google keyword rank tracking) ─────────────────────────────────
+// Basic-auth login + password (NOT a single token). From the env, overridable at
+// runtime from the UI (held in memory, like the LLM keys above).
+const ENV_DFS = { login: env('DATAFORSEO_LOGIN'), password: env('DATAFORSEO_PASSWORD') };
+const dfsOverride = { login: '', password: '' };
+export function getDfs() {
+  return { login: dfsOverride.login || ENV_DFS.login, password: dfsOverride.password || ENV_DFS.password };
+}
+export function setDfs({ login, password } = {}) {
+  if (login !== undefined) dfsOverride.login = (login ?? '').toString().trim();
+  if (password !== undefined) dfsOverride.password = (password ?? '').toString().trim();
+}
+export function dfsConfigured() { const d = getDfs(); return !!(d.login && d.password); }
+export function dfsSource() {
+  if (dfsOverride.login || dfsOverride.password) return 'session';
+  if (ENV_DFS.login && ENV_DFS.password) return 'env';
+  return null;
+}
+// A safely-masked view of the current login for the UI (never returns the password).
+export function dfsLoginMasked() {
+  const { login } = getDfs();
+  if (!login) return '';
+  const [name, dom] = login.split('@');
+  if (!dom) return login.slice(0, 2) + '…';
+  return name.slice(0, 2) + '…@' + dom;
+}
+
+// ── Ghost browser engine toggle ───────────────────────────────────────────────
+// Optional headless-browser engines (real ChatGPT / Google AI) are off by default
+// and can be flipped on from the UI (session) or via ENABLE_GHOST=1 in the env.
+let ghostFlag = env('ENABLE_GHOST') === '1';
+export function ghostEnabled() { return ghostFlag; }
+export function setGhost(on) { ghostFlag = !!on; }
 
 // A binding = one concrete way to run an engine.
 //   provider: how providers.js should call it
@@ -31,8 +82,8 @@ export const PORT = Number(env('PORT', '4505'));
 //   free:     is it free on its provider's free tier
 //   needs:    env keys that must be present
 //   grounding:(gemini only) turn on Google Search grounding
-const bind = (provider, model, { live = false, free = false, needs = [], grounding = false, match = [] } = {}) =>
-  ({ provider, model, live, free, needs, grounding, match });
+const bind = (provider, model, { live = false, free = false, needs = [], grounding = false, match = [], flag = null } = {}) =>
+  ({ provider, model, live, free, needs, grounding, match, flag });
 
 export const ENGINES = [
   {
@@ -87,17 +138,34 @@ export const ENGINES = [
     note: 'DeepSeek V3 — free and strong. Good coverage of the open-model surface.',
     bindings: [
       bind('openrouter', env('OR_DEEPSEEK_MODEL', 'deepseek/deepseek-chat-v3-0324:free'), { free: true, needs: ['OPENROUTER_API_KEY'], match: ['deepseek/deepseek-chat', 'deepseek-chat', 'deepseek/deepseek-v3', 'deepseek'] }),
-      bind('groq', env('GROQ_DEEPSEEK_MODEL', 'deepseek-r1-distill-llama-70b'), { free: true, needs: ['GROQ_API_KEY'], match: ['deepseek'] }),
+      bind('groq', env('GROQ_DEEPSEEK_MODEL', 'deepseek-r1-distill-llama-70b'), { free: true, needs: ['GROQ_API_KEY'], match: ['deepseek', 'qwen'] }),
     ],
+  },
+  // ── Headless-browser engines (optional, no API cost) — the REAL consumer pages.
+  //    Enabled only when the ghost toggle is on; best-effort and may need login.
+  {
+    id: 'chatgpt-web',
+    label: 'ChatGPT (web)',
+    note: 'The real ChatGPT app, scraped with a headless browser. No API cost. One-time login; best-effort.',
+    bindings: [bind('ghost', 'chatgpt-web', { live: true, free: true, needs: [], flag: 'ghost' })],
+  },
+  {
+    id: 'google-ai',
+    label: 'Google AI',
+    note: 'Google AI Overview + top results, scraped with a headless browser. No API cost; best-effort.',
+    bindings: [bind('ghost', 'google-ai', { live: true, free: true, needs: [], flag: 'ghost' })],
   },
 ];
 
-const haveKeys = (needs) => needs.every((k) => KEYS[k]);
+// A binding is available only if its keys are present AND (if flagged) its flag is on.
+const bindingAvailable = (b) => haveKeys(b.needs) && (!b.flag || (b.flag === 'ghost' && ghostFlag));
+
+const haveKeys = (needs) => { const K = getKeys(); return needs.every((k) => K[k]); };
 
 // Resolve one engine to a concrete binding given the available keys.
 // preferFree: when true, only consider free bindings if any free binding is usable.
 export function resolveEngine(engine, { preferFree = true } = {}) {
-  const usable = engine.bindings.filter((b) => haveKeys(b.needs));
+  const usable = engine.bindings.filter(bindingAvailable);
   if (!usable.length) return null;
   if (preferFree && usable.some((b) => b.free)) {
     return usable.find((b) => b.free);
@@ -111,7 +179,8 @@ export function engineStatus({ preferFree = true } = {}) {
     const binding = resolveEngine(e, { preferFree });
     // also compute the best possible binding ignoring preferFree, to tell the
     // user "you *could* enable this paid" vs "no key at all".
-    const anyUsable = e.bindings.find((b) => haveKeys(b.needs));
+    const anyUsable = e.bindings.find(bindingAvailable);
+    const ghostOnly = e.bindings.every((b) => b.flag === 'ghost');
     return {
       id: e.id,
       label: e.label,
@@ -122,6 +191,8 @@ export function engineStatus({ preferFree = true } = {}) {
         : null,
       hint: binding
         ? null
+        : ghostOnly
+        ? 'Turn on the headless browser engine to use this.'
         : anyUsable
         ? 'Available if you turn off "free only".'
         : `Add a key: ${[...new Set(e.bindings.flatMap((b) => b.needs))].join(' or ')}`,
@@ -132,15 +203,17 @@ export function engineStatus({ preferFree = true } = {}) {
 // Pick a fast, free model for the internal analysis work (keyword mining,
 // prompt generation, mention + sentiment judging). Prefer Groq → OpenRouter → Gemini.
 export function resolveAnalysisModel() {
+  const K = getKeys();
   // Default to gpt-oss-20b on Groq: consistently available, fast, free, good at JSON.
-  if (KEYS.GROQ_API_KEY) return { provider: 'groq', model: env('GROQ_ANALYSIS_MODEL', 'openai/gpt-oss-20b'), match: ['openai/gpt-oss-20b', 'gpt-oss-20b', 'gpt-oss', 'llama-3.3-70b', 'llama-3.1-8b-instant', 'llama', 'qwen'] };
-  if (KEYS.OPENROUTER_API_KEY) return { provider: 'openrouter', model: env('OR_ANALYSIS_MODEL', 'meta-llama/llama-3.3-70b-instruct:free'), match: ['meta-llama/llama-3.3-70b-instruct:free', 'llama-3.3-70b', 'deepseek/deepseek-chat', 'meta-llama/llama', 'gpt-oss'] };
-  if (KEYS.GEMINI_API_KEY) return { provider: 'gemini', model: env('GEMINI_ANALYSIS_MODEL', 'gemini-2.5-flash'), match: ['gemini-2.5-flash', 'gemini-2.0-flash', 'flash', 'gemini'] };
-  if (KEYS.OPENAI_API_KEY) return { provider: 'openai', model: 'gpt-4o-mini', match: ['gpt-4o-mini', 'gpt-4o', 'gpt'] };
-  if (KEYS.ANTHROPIC_API_KEY) return { provider: 'anthropic', model: 'claude-3-5-haiku-latest', match: ['haiku', 'claude'] };
+  if (K.GROQ_API_KEY) return { provider: 'groq', model: env('GROQ_ANALYSIS_MODEL', 'openai/gpt-oss-20b'), match: ['openai/gpt-oss-20b', 'gpt-oss-20b', 'gpt-oss', 'llama-3.3-70b', 'llama-3.1-8b-instant', 'llama', 'qwen'] };
+  if (K.OPENROUTER_API_KEY) return { provider: 'openrouter', model: env('OR_ANALYSIS_MODEL', 'meta-llama/llama-3.3-70b-instruct:free'), match: ['meta-llama/llama-3.3-70b-instruct:free', 'llama-3.3-70b', 'deepseek/deepseek-chat', 'meta-llama/llama', 'gpt-oss'] };
+  if (K.GEMINI_API_KEY) return { provider: 'gemini', model: env('GEMINI_ANALYSIS_MODEL', 'gemini-2.5-flash'), match: ['gemini-2.5-flash', 'gemini-2.0-flash', 'flash', 'gemini'] };
+  if (K.OPENAI_API_KEY) return { provider: 'openai', model: 'gpt-4o-mini', match: ['gpt-4o-mini', 'gpt-4o', 'gpt'] };
+  if (K.ANTHROPIC_API_KEY) return { provider: 'anthropic', model: 'claude-3-5-haiku-latest', match: ['haiku', 'claude'] };
   return null;
 }
 
 export function anyKeyPresent() {
-  return Object.values(KEYS).some(Boolean);
+  const K = getKeys();
+  return KEY_NAMES.some((k) => K[k]);
 }

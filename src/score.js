@@ -3,6 +3,7 @@
 // where we're losing (gaps), and a prioritised action list.
 
 import { analyzeJSON, hasAnalysisModel } from './llm.js';
+import { domainOf } from './crawl.js';
 
 const pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
 
@@ -72,6 +73,37 @@ export function computeScore(project, runs) {
     ...e, mentionRate: pct(e.mentions, e.runs), citationRate: pct(e.citations, e.runs),
   }));
 
+  // ── Cited websites ───────────────────────────────────────────────────────────
+  // Which third-party sites the engines lean on, and where competitors get cited
+  // but we don't (opportunity sites). Owner tags: 'own' | 'competitor' | 'other'.
+  const brandDomain = domainOf(project.brandDomain || '');
+  const compDomains = new Map((project.competitors || [])
+    .map((c) => [domainOf(c.domain || ''), c.name]).filter(([d]) => d));
+  const ownerOf = (d) => (d === brandDomain ? 'own' : compDomains.has(d) ? 'competitor' : 'other');
+
+  const citeTally = new Map();       // domain -> { domain, owner, count }
+  const oppTally = new Map();        // domain -> { domain, count } (comp-but-not-us answers)
+  for (const r of valid) {
+    const domains = new Set((r.citations || []).map((c) => domainOf(c.url)).filter(Boolean));
+    for (const d of domains) {
+      if (!citeTally.has(d)) citeTally.set(d, { domain: d, owner: ownerOf(d), count: 0 });
+      citeTally.get(d).count++;
+    }
+    // opportunity: a competitor is mentioned, we are not → the 'other' sources here
+    // are pages we could earn a mention on.
+    const compHere = (r.competitors || []).some((c) => c.mentioned) ||
+      (r.brandsNamed || []).some((n) => n && n.toLowerCase() !== brandKey);
+    if (!r.brand?.mentioned && compHere) {
+      for (const d of domains) {
+        if (ownerOf(d) !== 'other') continue;
+        if (!oppTally.has(d)) oppTally.set(d, { domain: d, count: 0 });
+        oppTally.get(d).count++;
+      }
+    }
+  }
+  const topCited = [...citeTally.values()].sort((a, b) => b.count - a.count).slice(0, 12);
+  const opportunities = [...oppTally.values()].sort((a, b) => b.count - a.count).slice(0, 10);
+
   // Gaps: prompts where we're absent but a competitor shows up.
   const gaps = valid
     .filter((r) => !r.brand?.mentioned && (r.competitors || []).some((c) => c.mentioned))
@@ -100,6 +132,8 @@ export function computeScore(project, runs) {
     sentiment,
     leaderboard,
     engines,
+    topCited,
+    opportunities,
     gaps,
   };
 }

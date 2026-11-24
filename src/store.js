@@ -74,6 +74,16 @@ export async function createProject(data) {
   return project;
 }
 
+// Insert an already-built project object (e.g. the demo). Replaces any existing
+// demo project so "Load demo data" is idempotent.
+export async function insertProject(project) {
+  const db = await load();
+  if (project.isDemo) db.projects = db.projects.filter((p) => !p.isDemo);
+  db.projects.push(project);
+  await persist();
+  return project;
+}
+
 export async function updateProject(id, patch) {
   const db = await load();
   const p = db.projects.find((x) => x.id === id);

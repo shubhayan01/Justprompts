@@ -99,8 +99,9 @@ export async function trackPrompt({ project, prompt, engineIds }) {
     .map((e) => ({ engine: e, binding: resolveEngine(e, { preferFree: project.preferFree !== false }) }))
     .filter((x) => x.binding);
 
-  const runs = [];
-  for (const { engine, binding } of engines) {
+  // Run every engine for this prompt IN PARALLEL — per-prompt latency becomes the
+  // slowest single engine, not the sum of them all.
+  const runs = await Promise.all(engines.map(async ({ engine, binding }) => {
     const run = {
       id: uid(),
       ts: new Date().toISOString(),
@@ -121,7 +122,11 @@ export async function trackPrompt({ project, prompt, engineIds }) {
       run.citations = citations;
 
       const brandDet = detect(answer, citations, { names: brandNames, domain: brandDomain });
-      const j = await judge({
+      // The judge (rank/recommended/sentiment) is the slow part — one extra LLM
+      // call per answer. Skip it with DISABLE_JUDGE=1 for a much faster run, or
+      // when nothing was named (nothing to rank).
+      const anyNamed = brandDet.mentioned || competitors.some((c) => detect(answer, citations, { names: c.names, domain: c.domain }).mentioned);
+      const j = (process.env.DISABLE_JUDGE === '1' || !anyNamed) ? null : await judge({
         answer,
         brandName: project.brandName,
         competitorNames: competitors.map((c) => c.name),
@@ -146,8 +151,8 @@ export async function trackPrompt({ project, prompt, engineIds }) {
       run.brand = { mentioned: false, cited: false, count: 0, rank: null, recommended: false, sentiment: 'absent' };
       run.competitors = competitors.map((c) => ({ name: c.name, mentioned: false, cited: false, count: 0 }));
     }
-    runs.push(run);
-  }
+    return run;
+  }));
   return runs;
 }
 
