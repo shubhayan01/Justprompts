@@ -2,7 +2,7 @@ import express from 'express';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PORT, engineStatus, resolveAnalysisModel, anyKeyPresent, ENGINES, KEY_NAMES, getKeys, setKeys, keySources, ghostEnabled, setGhost, setDfs, dfsConfigured, dfsSource, dfsLoginMasked } from './src/config.js';
+import { PORT, engineStatus, resolveAnalysisModel, anyKeyPresent, ENGINES, KEY_NAMES, getKeys, setKeys, keySources, ghostEnabled, setGhost, setDfs, dfsConfigured, dfsSource, dfsLoginMasked, setSemrush, semrushConfigured, semrushSource, semrushKeyMasked } from './src/config.js';
 import { pickModel, clearModelCache } from './src/models.js';
 import * as store from './src/store.js';
 import { crawlSite, extractKeywords, brandFromDomain, domainOf, normalizeUrl } from './src/crawl.js';
@@ -11,6 +11,7 @@ import { generatePrompts } from './src/prompts.js';
 import { trackProject } from './src/track.js';
 import { computeScore, recommend } from './src/score.js';
 import { trackRanks, validateDfs, defaultTrackedKeywords, snapshotOf } from './src/ranktrack.js';
+import { validateSemrush, enrichKeywords, relatedKeywords, domainOrganic, compareDomains, countryCode, UNIT_COST } from './src/semrush.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -110,6 +111,22 @@ app.post('/api/dataforseo', wrap(async (req, res) => {
     try { account = await validateDfs(); } catch (e) { error = e.message; }
   }
   ok(res, { configured: dfsConfigured(), source: dfsSource(), login: dfsLoginMasked(), account, error });
+}));
+
+// ── Semrush API key (keyword data, Google rankings, domain comparison) ─────────
+app.get('/api/semrush', (req, res) => ok(res, {
+  configured: semrushConfigured(), source: semrushSource(), key: semrushKeyMasked(),
+}));
+
+app.post('/api/semrush', wrap(async (req, res) => {
+  const b = req.body || {};
+  if ('key' in b || 'apikey' in b) setSemrush(b.key ?? b.apikey);
+  let account = null, error = null;
+  if (semrushConfigured()) {
+    const v = await validateSemrush();
+    if (v.ok) account = { ok: true }; else error = v.error;
+  }
+  ok(res, { configured: semrushConfigured(), source: semrushSource(), key: semrushKeyMasked(), account, error });
 }));
 
 // ── Demo data (no API keys needed) ─────────────────────────────────────────────
@@ -376,6 +393,82 @@ app.get('/api/projects/:id/ranks/track', async (req, res) => {
   clearInterval(heartbeat);
   res.end();
 });
+
+// ── Semrush: keyword data, rankings & domain comparison for a project ──────────
+// Stored results so the UI (and reloads) don't re-spend API units.
+app.get('/api/projects/:id/semrush', wrap(async (req, res) => {
+  const project = await store.getProject(req.params.id);
+  if (!project) return fail(res, 404, 'not found');
+  ok(res, {
+    configured: semrushConfigured(), source: semrushSource(), key: semrushKeyMasked(),
+    keywords: project.semrushKeywords || null,
+    related: project.semrushRelated || null,
+    ranks: project.semrushRanks || null,
+    compare: project.semrushCompare || null,
+    unitCost: UNIT_COST,
+  });
+}));
+
+// Enrich the project's tracked/mined keywords with Semrush volume, difficulty, CPC
+// & intent (cost-capped by `limit`), and optionally pull related-keyword ideas.
+app.post('/api/projects/:id/semrush/keywords', wrap(async (req, res) => {
+  const project = await store.getProject(req.params.id);
+  if (!project) return fail(res, 404, 'not found');
+  if (!semrushConfigured()) return fail(res, 400, 'Add your Semrush API key first (Rank tracking → Semrush settings).');
+  const b = req.body || {};
+  const country = countryCode(b.country || project.rankConfig?.location || 'us');
+  const limit = Math.min(Math.max(Number(b.limit) || 25, 1), 100);
+  const source = cleanList(b.keywords);
+  const keywords = source.length ? source
+    : (project.trackedKeywords?.length ? project.trackedKeywords : defaultTrackedKeywords(project, limit));
+  if (!keywords.length) return fail(res, 400, 'No keywords to enrich — mine keywords or add some first.');
+
+  const metrics = await enrichKeywords(keywords, { country, limit });
+  let related = null;
+  if (b.related && keywords[0]) {
+    try { related = await relatedKeywords(keywords[0], { country, limit: Math.min(Number(b.relatedLimit) || 20, 50) }); }
+    catch (e) { related = { error: e.message }; }
+  }
+  const payload = { ts: new Date().toISOString(), country, ...metrics };
+  await store.mutate(project.id, (p) => {
+    p.semrushKeywords = payload;
+    if (related && Array.isArray(related)) p.semrushRelated = { ts: payload.ts, country, seed: keywords[0], ideas: related };
+  });
+  ok(res, { keywords: payload, related });
+}));
+
+// A domain's Google organic rankings (keyword + position + volume + traffic).
+app.post('/api/projects/:id/semrush/ranks', wrap(async (req, res) => {
+  const project = await store.getProject(req.params.id);
+  if (!project) return fail(res, 404, 'not found');
+  if (!semrushConfigured()) return fail(res, 400, 'Add your Semrush API key first.');
+  const domain = domainOf(req.body?.domain || project.brandDomain);
+  if (!domain) return fail(res, 400, 'This project has no brand domain to rank — add one on the Website tab.');
+  const country = countryCode(req.body?.country || project.rankConfig?.location || 'us');
+  const limit = Math.min(Math.max(Number(req.body?.limit) || 50, 1), 500);
+  const rows = await domainOrganic(domain, { country, limit });
+  const payload = { ts: new Date().toISOString(), domain, country, rows, estUnits: rows.length * UNIT_COST.organic };
+  await store.mutate(project.id, (p) => { p.semrushRanks = payload; });
+  ok(res, { ranks: payload });
+}));
+
+// Compare the brand vs its competitors on organic visibility (cheap summaries).
+app.post('/api/projects/:id/semrush/compare', wrap(async (req, res) => {
+  const project = await store.getProject(req.params.id);
+  if (!project) return fail(res, 404, 'not found');
+  if (!semrushConfigured()) return fail(res, 400, 'Add your Semrush API key first.');
+  const country = countryCode(req.body?.country || project.rankConfig?.location || 'us');
+  const brand = domainOf(project.brandDomain);
+  const comps = (project.competitors || []).map((c) => domainOf(c.domain)).filter(Boolean);
+  const domains = [brand, ...comps].filter(Boolean);
+  if (!domains.length) return fail(res, 400, 'Add a brand domain and competitors first (Website tab).');
+  const { rows, charged, estUnits } = await compareDomains(domains, { country });
+  // Mark which row is the brand for the UI.
+  for (const r of rows) r.isBrand = !!brand && r.domain === brand;
+  const payload = { ts: new Date().toISOString(), country, brand, rows, charged, estUnits };
+  await store.mutate(project.id, (p) => { p.semrushCompare = payload; });
+  ok(res, { compare: payload });
+}));
 
 // ── Score / history ─────────────────────────────────────────────────────────────
 app.get('/api/projects/:id/score', wrap(async (req, res) => {

@@ -68,6 +68,26 @@ export function dfsLoginMasked() {
   return name.slice(0, 2) + '…@' + dom;
 }
 
+// ── Semrush (v4 API — keyword data, Google rankings, domain comparison) ───────
+// A single v4 "Apikey" token (prefix semrtkn-pat-…), NOT the classic ?key= hex.
+// From the env, overridable at runtime from the UI (held in memory, like above).
+const ENV_SEMRUSH = env('SEMRUSH_API_KEY');
+let semrushOverride = '';
+export function getSemrush() { return semrushOverride || ENV_SEMRUSH; }
+export function setSemrush(key) { semrushOverride = (key ?? '').toString().trim(); }
+export function semrushConfigured() { return !!getSemrush(); }
+export function semrushSource() {
+  if (semrushOverride) return 'session';
+  if (ENV_SEMRUSH) return 'env';
+  return null;
+}
+// A safely-masked view of the key for the UI (never returns the full token).
+export function semrushKeyMasked() {
+  const k = getSemrush();
+  if (!k) return '';
+  return k.slice(0, 12) + '…' + k.slice(-4);
+}
+
 // ── Ghost browser engine toggle ───────────────────────────────────────────────
 // Optional headless-browser engines (real ChatGPT / Google AI) are off by default
 // and can be flipped on from the UI (session) or via ENABLE_GHOST=1 in the env.

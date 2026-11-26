@@ -30,6 +30,7 @@ Put keys in a `.env` file (copy `.env.example`). You only need **one** to start;
 | `OPENAI_API_KEY` | 💲 paid | Real ChatGPT (GPT-4o). | https://platform.openai.com/api-keys |
 | `ANTHROPIC_API_KEY` | 💲 paid | Real Claude. | https://console.anthropic.com/settings/keys |
 | `PERPLEXITY_API_KEY` | 💲 paid | Perplexity (live web). | https://www.perplexity.ai/settings/api |
+| `SEMRUSH_API_KEY` | 💲 paid | Real keyword data (volume, difficulty, CPC, intent), your Google organic rankings, and brand-vs-competitor comparison — on the **Google Rank** tab. v4 `Apikey` token (`semrtkn-pat-…`); needs a plan with API access + units. Cost-aware: results cached, unit cost shown per run. | https://www.semrush.com/accounts/api-keys/active |
 
 > **Recommended free combo:** `GEMINI_API_KEY` (live web + citations) + `GROQ_API_KEY` (fast analysis). Add `OPENROUTER_API_KEY` to cover ChatGPT/Claude/DeepSeek-class models too.
 

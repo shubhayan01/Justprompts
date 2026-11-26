@@ -403,6 +403,7 @@ async function loadRanks() {
     // Stored results.
     if (d.results) renderRanks(d.results, d.snapshots || []);
   } catch (e) { /* non-fatal */ }
+  loadSemrush();
 }
 
 function updateRankKwCount() {
@@ -461,6 +462,112 @@ function checkGoogleRanks() {
     updateStepper();
   });
   es.addEventListener('error', (ev) => { es.close(); $('#rankGoBtn').disabled = false; let m = 'rank check failed'; try { m = JSON.parse(ev.data).error; } catch {} $('#rankStatus').innerHTML = `<span class="no">${esc(m)}</span>`; });
+}
+
+// ── Semrush (keyword data, organic rankings, competitor comparison) ───────────
+const semState = { configured: false };
+
+function renderSemBanner(d) {
+  semState.configured = d.configured;
+  const bar = $('#semConnBar');
+  if (!bar) return;
+  bar.className = 'hint';
+  if (d.configured) {
+    bar.innerHTML = `<b>✓ Semrush connected</b> <span class="muted">(${esc(d.key || 'key')}, ${d.source})</span> — keyword data &amp; comparison ready.`;
+    $('#semSettings').open = false;
+  } else {
+    bar.innerHTML = `<b>Connect Semrush for keyword data.</b> Add your API key under <b>⚙️ Semrush API key</b> below.`;
+    $('#semSettings').open = true;
+  }
+}
+
+async function loadSemStatus() {
+  try { renderSemBanner(await api('/api/semrush')); } catch { /* ignore */ }
+}
+
+async function loadSemrush() {
+  if (!state.project) return;
+  try {
+    const d = await api(`/api/projects/${state.project.id}/semrush`);
+    renderSemBanner(d);
+    renderSem(d);
+  } catch { /* non-fatal */ }
+}
+
+async function saveSemrush() {
+  const key = $('#sem_key').value.trim();
+  if (!key) { $('#semStatus').innerHTML = '<span class="no">Paste your Semrush API key.</span>'; return; }
+  $('#saveSemBtn').disabled = true; $('#semStatus').innerHTML = '<span class="spin"></span> testing…';
+  try {
+    const d = await api('/api/semrush', { method: 'POST', body: JSON.stringify({ key }) });
+    if (d.account?.ok) { $('#semStatus').innerHTML = '<span class="chk">✓ connected</span>'; $('#sem_key').value = ''; renderSemBanner(d); }
+    else $('#semStatus').innerHTML = `<span class="no">${esc(d.error || 'not configured')}</span>`;
+  } catch (e) { $('#semStatus').innerHTML = `<span class="no">${esc(e.message)}</span>`; }
+  $('#saveSemBtn').disabled = false;
+}
+
+function semGuard() {
+  if (!state.project) { $('#semActStatus').innerHTML = '<span class="no">Scan a website first.</span>'; return false; }
+  if (!semState.configured) { $('#semActStatus').innerHTML = '<span class="no">Connect Semrush first (⚙️ above).</span>'; $('#semSettings').open = true; return false; }
+  return true;
+}
+
+async function semPost(path, body, label) {
+  if (!semGuard()) return null;
+  $('#semActStatus').innerHTML = `<span class="spin"></span> ${esc(label)}…`;
+  try {
+    const d = await api(`/api/projects/${state.project.id}/semrush/${path}`, { method: 'POST', body: JSON.stringify(body || {}) });
+    $('#semActStatus').textContent = 'done';
+    await loadSemrush();
+    return d;
+  } catch (e) { $('#semActStatus').innerHTML = `<span class="no">${esc(e.message)}</span>`; return null; }
+}
+
+const semEnrich = () => semPost('keywords', { related: true }, 'fetching keyword metrics');
+const semRanks = () => semPost('ranks', {}, 'fetching organic rankings');
+const semCompare = () => semPost('compare', {}, 'comparing domains');
+
+const n0 = (v) => (v == null ? '—' : Number(v).toLocaleString());
+const money = (v) => (v == null ? '—' : '$' + Number(v).toFixed(2));
+
+function renderSem(d) {
+  const box = $('#semOut');
+  if (!box) return;
+  let html = '';
+
+  const kw = d.keywords;
+  if (kw?.keywords?.length) {
+    const rows = kw.keywords.filter((k) => !k.error).slice().sort((a, b) => (b.volume ?? -1) - (a.volume ?? -1));
+    html += `<div style="margin-bottom:16px"><b class="small">Keyword metrics</b> <span class="muted small">(${rows.length} · ${kw.country?.toUpperCase?.() || ''}${kw.estUnits ? ` · ~${kw.estUnits} units` : ''})</span>
+      <table class="semtbl"><thead><tr><th>Keyword</th><th>Volume</th><th>Difficulty</th><th>CPC</th><th>Intent</th></tr></thead><tbody>
+      ${rows.map((k) => `<tr><td>${esc(k.phrase)}</td><td>${n0(k.volume)}</td><td>${k.difficulty == null ? '—' : esc(String(k.difficulty))}</td><td>${money(k.cpc)}</td><td class="muted">${esc(k.intent || '—')}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  }
+
+  const rel = d.related;
+  if (rel?.ideas?.length) {
+    html += `<details style="margin-bottom:16px"><summary class="small" style="cursor:pointer"><b>Related keyword ideas</b> <span class="muted">(seed: ${esc(rel.seed || '')})</span></summary>
+      <div style="margin-top:8px">${rel.ideas.map((k) => `<span class="kw">${esc(k.phrase)}${k.volume != null ? ` <span class="i">${n0(k.volume)}/mo</span>` : ''}</span>`).join('')}</div></details>`;
+  }
+
+  const rk = d.ranks;
+  if (rk?.rows?.length) {
+    const rows = rk.rows.slice().sort((a, b) => (a.position ?? 999) - (b.position ?? 999)).slice(0, 100);
+    html += `<div style="margin-bottom:16px"><b class="small">Your organic rankings</b> <span class="muted small">(${esc(rk.domain)} · ${rows.length} keywords)</span>
+      <table class="semtbl"><thead><tr><th>#</th><th>Keyword</th><th>Volume</th><th>Traffic</th></tr></thead><tbody>
+      ${rows.map((k) => `<tr><td><b>${k.position ?? '—'}</b></td><td>${esc(k.keyword)}</td><td>${n0(k.volume)}</td><td>${n0(k.traffic)}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  }
+
+  const cmp = d.compare;
+  if (cmp?.rows?.length) {
+    html += `<div style="margin-bottom:8px"><b class="small">Brand vs competitors</b> <span class="muted small">(${cmp.country?.toUpperCase?.() || ''} · organic visibility)</span>
+      <table class="semtbl"><thead><tr><th>Domain</th><th>Rank</th><th>Keywords</th><th>Est. traffic</th></tr></thead><tbody>
+      ${cmp.rows.map((r) => `<tr${r.isBrand ? ' style="font-weight:600;background:rgba(99,102,241,.08)"' : ''}><td>${esc(r.domain)}${r.isBrand ? ' <span class="i">you</span>' : ''}</td><td>${r.error ? '<span class="no">err</span>' : n0(r.rank)}</td><td>${n0(r.positions)}</td><td>${n0(r.traffic)}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  }
+
+  box.innerHTML = html || '<p class="muted">No Semrush data yet. Click <b>Enrich keywords</b>, <b>My organic rankings</b> or <b>Compare vs competitors</b> above.</p>';
 }
 
 function posCell(k) {
@@ -770,6 +877,10 @@ $('#rankGoBtn').onclick = checkGoogleRanks;
 $('#saveDfsBtn').onclick = saveDfs;
 $('#saveRankCfgBtn').onclick = () => saveRankConfig();
 $('#rankKeywords').addEventListener('input', updateRankKwCount);
+$('#saveSemBtn').onclick = saveSemrush;
+$('#semKwBtn').onclick = semEnrich;
+$('#semRankBtn').onclick = semRanks;
+$('#semCompBtn').onclick = semCompare;
 
 (async function init() {
   fillKeyInputs();
@@ -780,6 +891,7 @@ $('#rankKeywords').addEventListener('input', updateRankKwCount);
   if (ghostOn) await pushGhost(true); // re-apply ghost toggle (server holds it in memory)
   try { await loadHealth(); } catch (e) { $('#keyHint').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   loadDfsStatus();
+  loadSemStatus();
   updateStepper();
   await loadRecent();
 })();

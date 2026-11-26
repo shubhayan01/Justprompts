@@ -238,6 +238,11 @@ tr:hover td{background:var(--surface-2)}
 .bar>span{display:block;height:100%;background:var(--blue);border-radius:999px}
 .bar.us>span{background:var(--accent)}
 
+.hr{height:1px;background:var(--line);border:0}
+code{background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:.82em}
+.semtbl{font-size:.82rem}
+.semtbl td,.semtbl th{padding:7px 10px}
+
 /* ── Keyword chips ──────────────────────────────────────────────────────────── */
 .kw{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--line);
   border-radius:7px;padding:5px 10px;margin:0 6px 6px 0;font-size:.8rem;color:var(--ink)}

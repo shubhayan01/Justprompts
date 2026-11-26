@@ -165,6 +165,31 @@
         <span id="rankStatus" class="muted small"></span>
       </div>
       <div id="rankOut" style="margin-top:16px"><p class="muted">No rank check yet. Set your keywords above and click <b>Check Google rankings</b> — or load demo data from <b>Setup</b> to preview the dashboard.</p></div>
+
+      <!-- Semrush: keyword data, organic rankings & domain comparison -->
+      <div class="hr" style="margin:22px 0 10px"></div>
+      <div class="tag">Semrush</div>
+      <h2 style="margin-top:6px">Keyword data &amp; competitor comparison</h2>
+      <p class="muted">Real search volume, keyword difficulty, CPC and intent for your keywords — plus your Google organic rankings and a side-by-side comparison with competitors. Cost-aware: results are cached and each run shows its unit cost before spending.</p>
+
+      <div id="semConnBar" class="hint" style="margin-top:4px"></div>
+
+      <details id="semSettings">
+        <summary>⚙️ Semrush API key</summary>
+        <p class="muted small">A single v4 <b>Apikey</b> token (starts <code>semrtkn-pat-…</code>, <em>not</em> the classic hex key). Held in server memory. Create/permission it at <a href="https://www.semrush.com/accounts/api-keys/active" target="_blank" rel="noopener">semrush.com/accounts/api-keys</a> — needs a plan with API access + units.</p>
+        <div class="row">
+          <div style="flex:1 1 320px"><label>API key</label><input type="password" id="sem_key" placeholder="semrtkn-pat-…" autocomplete="off"></div>
+        </div>
+        <div class="toolbar"><button id="saveSemBtn" class="small">Save &amp; test</button><span id="semStatus" class="muted small"></span></div>
+      </details>
+
+      <div class="toolbar" style="margin-top:12px">
+        <button id="semKwBtn" class="pin-btn">Enrich keywords</button>
+        <button id="semRankBtn" class="ghost small">My organic rankings</button>
+        <button id="semCompBtn" class="ghost small">Compare vs competitors</button>
+        <span id="semActStatus" class="muted small"></span>
+      </div>
+      <div id="semOut" style="margin-top:14px"></div>
     </section>
 
     <!-- Prompts -->
